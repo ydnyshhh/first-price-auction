@@ -85,6 +85,41 @@ Each dataset row stores `prompt` plus structured `info`. There is intentionally 
 
 Categorical auction metadata is stored in each example's `info` field and duplicated in dataset columns where useful, including `instance_id`, `task_mode`, `distribution_type`, `difficulty`, opponent-policy details, reserve price, and the simulation seed.
 
+## Example Row
+
+Example prompt:
+
+```text
+You are bidding in a sealed-bid first-price auction.
+Your private value for the item is 64.20.
+There are 4 bidders total, including you.
+Private values are drawn independently from Uniform[0.0, 100.0].
+Opponents are modeled as using standard equilibrium-inspired shading for uniform private values (approximately alpha=0.75).
+There is no reserve price.
+If the highest eligible bids tie, the winner is chosen uniformly at random among tied bidders.
+Your goal is to maximize expected payoff. If you win, you pay your own bid, so payoff = private_value - bid. If you lose, payoff = 0.
+Valid bids are numbers between 0 and 100.00, inclusive.
+Bids below 0 or above the maximum are invalid.
+Return JSON exactly in the form {"bid": 47.5, "reasoning_summary": "optional short explanation"}. Scoring only uses "bid".
+```
+
+Example `info` sketch:
+
+```json
+{
+  "instance_id": "first_price_auction_00017",
+  "task_mode": "textbook",
+  "private_value": 64.2,
+  "n_bidders": 4,
+  "distribution_type": "uniform",
+  "reserve_price": 0.0,
+  "tie_break_rule": "random",
+  "opponent_policy_type": "equilibrium",
+  "max_bid": 100.0,
+  "reference_bid": 48.15
+}
+```
+
 ## Local Usage
 
 ```python
