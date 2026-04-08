@@ -12,6 +12,7 @@ The environment targets strategic reasoning under incomplete information:
 - adaptation to perturbed opponent policies
 - robustness to value-distribution shift
 - reasoning under reserve prices and tie rules
+- best-response adaptation to disclosed heuristic opponents, including noisy, mixed, threshold-jump, and capped-bid policies
 
 The strongest signal comes from how well a model chooses a bid against the disclosed simulator for the current instance.
 
@@ -28,6 +29,8 @@ The strongest signal comes from how well a model chooses a bid against the discl
 | `require_json_output` | `bool` | `True` | If true, prompts request `{"bid": ..., "reasoning_summary": ...}`. |
 | `num_mc_samples` | `int` | `256` | Monte Carlo samples used to estimate expected utility. |
 | `best_response_grid_size` | `int` | `41` | Grid size for approximate empirical best-response search. |
+| `best_response_refinement_rounds` | `int` | `2` | Number of local refinement rounds run after the coarse best-response grid search. |
+| `best_response_refinement_grid_size` | `int` | `9` | Grid size for each local best-response refinement round. |
 | `compute_best_response_baseline` | `bool` | `True` | Whether to compute best-response diagnostics. |
 | `invalid_bid_penalty` | `float` | `-1.0` | Score used for parse failures or out-of-range bids. |
 | `overbid_penalty` | `float` | `0.0` | Optional score penalty when `bid > private_value`. |
@@ -50,10 +53,12 @@ Reward behavior:
 The environment also computes:
 
 - `reference_bid` and `reference_expected_utility`
-- `best_response_bid` and `best_response_expected_utility` from an empirical bid grid search
+- `best_response_bid` and `best_response_expected_utility` from an empirical bid grid search with local refinement around the best coarse bid
 - regret-style gaps against those baselines
 
 Because the environment exposes the auction assumptions directly in the prompt, these baselines are best interpreted as "how close was the submitted bid to the simulator's best response?" rather than as a hidden-theory benchmark.
+
+The default `overbid_penalty` is `0.0` on purpose: raw expected utility already makes overbidding weakly dominated in a first-price auction because every win above value produces negative payoff. If you want an extra shaping signal during training, you can turn on a positive `overbid_penalty`.
 
 ## Logged Metrics
 
@@ -84,6 +89,8 @@ Numeric rollout metrics exposed through the rubric:
 Each dataset row stores `prompt` plus structured `info`. There is intentionally no `answer` string field, because scoring is programmatic and fully determined by the simulator-backed rubric rather than by string matching against a canonical answer.
 
 Categorical auction metadata is stored in each example's `info` field and duplicated in dataset columns where useful, including `instance_id`, `task_mode`, `distribution_type`, `difficulty`, opponent-policy details, reserve price, and the simulation seed.
+
+The opponent models are still stylized heuristics rather than a full empirical auction model, but they now include non-linear policies in addition to linear and noisy-linear bidders.
 
 ## Example Row
 

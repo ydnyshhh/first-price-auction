@@ -52,6 +52,8 @@ class AuctionEnvConfig:
     require_json_output: bool = True
     num_mc_samples: int = 256
     best_response_grid_size: int = 41
+    best_response_refinement_rounds: int = 2
+    best_response_refinement_grid_size: int = 9
     compute_best_response_baseline: bool = True
     invalid_bid_penalty: float = -1.0
     overbid_penalty: float = 0.0
@@ -66,6 +68,10 @@ class AuctionEnvConfig:
             raise ValueError("num_mc_samples must be positive")
         if self.best_response_grid_size < 2:
             raise ValueError("best_response_grid_size must be at least 2")
+        if self.best_response_refinement_rounds < 0:
+            raise ValueError("best_response_refinement_rounds must be non-negative")
+        if self.best_response_refinement_grid_size < 3:
+            raise ValueError("best_response_refinement_grid_size must be at least 3")
         if self.max_bid <= 0:
             raise ValueError("max_bid must be positive")
         if not self.task_modes:
@@ -202,13 +208,11 @@ def sample_value(rng: random.Random, distribution_type: str, params: JsonDict) -
     if distribution_type == "discrete":
         threshold = rng.random()
         cumulative = 0.0
-        chosen = params["points"][-1]["value"]
         for point in params["points"]:
             cumulative += float(point["prob"])
-            chosen = point["value"]
             if threshold <= cumulative:
-                break
-        return float(chosen)
+                return float(point["value"])
+        return float(params["points"][-1]["value"])
     raise ValueError(f"Unsupported distribution_type: {distribution_type}")
 
 
@@ -247,14 +251,30 @@ def sample_policy_spec(
                     "noise_width": round_amount(0.08 * max_bid),
                 },
             )
+        if draw < 0.9:
+            return (
+                "threshold_jump",
+                {
+                    "alpha": round_amount(rng.uniform(0.55, 0.78), 3),
+                    "threshold": round_amount(rng.uniform(0.45 * max_bid, 0.7 * max_bid)),
+                    "jump": round_amount(rng.uniform(4.0, 10.0)),
+                },
+            )
         mixture = [
             {"type": "truthful", "weight": 0.30},
-            {"type": "fractional", "weight": 0.40, "alpha": 0.72},
+            {"type": "fractional", "weight": 0.30, "alpha": 0.72},
             {
                 "type": "noisy_fractional",
-                "weight": 0.30,
+                "weight": 0.20,
                 "alpha": 0.67,
                 "noise_width": round_amount(0.06 * max_bid),
+            },
+            {
+                "type": "threshold_jump",
+                "weight": 0.20,
+                "alpha": 0.68,
+                "threshold": round_amount(0.6 * max_bid),
+                "jump": 6.0,
             },
         ]
         return "mixed", {"mixture": mixture}
@@ -265,6 +285,14 @@ def sample_policy_spec(
             return "truthful", {}
         if draw < 0.75:
             return "fractional", {"alpha": round_amount(rng.uniform(0.6, 0.85), 3)}
+        if draw < 0.9:
+            return (
+                "capped_fractional",
+                {
+                    "alpha": round_amount(rng.uniform(0.85, 1.05), 3),
+                    "cap": round_amount(rng.uniform(0.55 * max_bid, 0.85 * max_bid)),
+                },
+            )
         return (
             "noisy_fractional",
             {
@@ -288,12 +316,25 @@ def sample_policy_spec(
         )
     mixture = [
         {"type": "truthful", "weight": 0.25},
-        {"type": "fractional", "weight": 0.45, "alpha": 0.70},
+        {"type": "fractional", "weight": 0.25, "alpha": 0.70},
         {
             "type": "noisy_fractional",
-            "weight": 0.30,
+            "weight": 0.20,
             "alpha": 0.66,
             "noise_width": round_amount(0.05 * max_bid),
+        },
+        {
+            "type": "threshold_jump",
+            "weight": 0.15,
+            "alpha": 0.65,
+            "threshold": round_amount(0.55 * max_bid),
+            "jump": 5.0,
+        },
+        {
+            "type": "capped_fractional",
+            "weight": 0.15,
+            "alpha": 0.95,
+            "cap": round_amount(0.75 * max_bid),
         },
     ]
     return "mixed", {"mixture": mixture}
@@ -314,6 +355,16 @@ def describe_policy(policy_type: str, params: JsonDict) -> str:
             "noisy fractional bidding: bid = "
             f"{params['alpha']} * value + bounded noise in "
             f"[-{params['noise_width']}, {params['noise_width']}]"
+        )
+    if policy_type == "threshold_jump":
+        return (
+            "threshold jump bidding: below value "
+            f"{params['threshold']} use {params['alpha']} * value, then add a jump of {params['jump']}"
+        )
+    if policy_type == "capped_fractional":
+        return (
+            "capped fractional bidding: bid = min("
+            f"{params['alpha']} * value, {params['cap']})"
         )
     mixture_parts = []
     for part in params["mixture"]:
@@ -343,6 +394,17 @@ def compute_opponent_bid(
         base = float(params["alpha"]) * value
         noise = rng.uniform(-float(params["noise_width"]), float(params["noise_width"]))
         return clip_value(base + noise, 0.0, max_bid)
+    if policy_type == "threshold_jump":
+        alpha = float(params["alpha"])
+        threshold = float(params["threshold"])
+        jump = float(params["jump"])
+        bid = alpha * value
+        if value >= threshold:
+            bid += jump
+        return clip_value(bid, 0.0, max_bid)
+    if policy_type == "capped_fractional":
+        bid = float(params["alpha"]) * value
+        return clip_value(min(bid, float(params["cap"])), 0.0, max_bid)
     if policy_type == "mixed":
         threshold = rng.random()
         cumulative = 0.0
@@ -665,10 +727,18 @@ def estimate_bid_metrics(
     return total_utility / sample_count, total_wins / sample_count
 
 
-def candidate_bids(max_bid: float, grid_size: int, extras: Iterable[float | None] = ()) -> list[float]:
-    candidates = {round(index * max_bid / (grid_size - 1), 8) for index in range(grid_size)}
+def candidate_bids(
+    low_bid: float,
+    high_bid: float,
+    grid_size: int,
+    extras: Iterable[float | None] = (),
+) -> list[float]:
+    candidates = {
+        round(low_bid + index * (high_bid - low_bid) / (grid_size - 1), 8)
+        for index in range(grid_size)
+    }
     for candidate in extras:
-        if candidate is not None and 0.0 <= candidate <= max_bid:
+        if candidate is not None and low_bid <= candidate <= high_bid:
             candidates.add(round(float(candidate), 8))
     return sorted(candidates)
 
@@ -680,11 +750,15 @@ def search_best_response(
     scenarios: Sequence[Scenario],
     max_bid: float,
     grid_size: int,
+    refinement_rounds: int,
+    refinement_grid_size: int,
     extras: Iterable[float | None] = (),
 ) -> tuple[float, float]:
     best_bid = 0.0
     best_utility = -math.inf
-    for candidate in candidate_bids(max_bid, grid_size, extras):
+    step_size = max_bid / (grid_size - 1)
+
+    for candidate in candidate_bids(0.0, max_bid, grid_size, extras):
         utility = estimate_bid_metrics(
             bid=candidate,
             private_value=private_value,
@@ -697,6 +771,26 @@ def search_best_response(
         ):
             best_bid = candidate
             best_utility = utility
+
+    for _ in range(refinement_rounds):
+        local_low = max(0.0, best_bid - step_size)
+        local_high = min(max_bid, best_bid + step_size)
+        local_extras = (best_bid, private_value, reserve_price, *extras)
+        for candidate in candidate_bids(local_low, local_high, refinement_grid_size, local_extras):
+            utility = estimate_bid_metrics(
+                bid=candidate,
+                private_value=private_value,
+                reserve_price=reserve_price,
+                tie_break_rule=tie_break_rule,
+                scenarios=scenarios,
+            )[0]
+            if utility > best_utility + EPSILON or (
+                abs(utility - best_utility) <= EPSILON and candidate < best_bid
+            ):
+                best_bid = candidate
+                best_utility = utility
+        step_size = (local_high - local_low) / (refinement_grid_size - 1)
+
     return best_bid, best_utility
 
 
@@ -734,6 +828,8 @@ def analyze_completion(
             scenarios=scenarios,
             max_bid=float(info["max_bid"]),
             grid_size=config.best_response_grid_size,
+            refinement_rounds=config.best_response_refinement_rounds,
+            refinement_grid_size=config.best_response_refinement_grid_size,
             extras=(parsed.bid, reference_bid, float(info["private_value"])),
         )
 
