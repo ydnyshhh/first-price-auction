@@ -2,6 +2,8 @@
 
 `first_price_auction` is a compact Prime / `verifiers` environment for sealed-bid first-price auctions. Each example gives the model a private value and a fully specified auction setting, asks for one bid, and scores that bid with deterministic Monte Carlo expected utility. No LLM judge is used.
 
+In many modes the prompt explicitly reveals the opponent policy class, so the benchmark should be read mainly as "compute a good best response against a known simulator" rather than "infer hidden strategic structure from sparse auction data."
+
 ## What It Tests
 
 The environment targets strategic reasoning under incomplete information:
@@ -10,6 +12,8 @@ The environment targets strategic reasoning under incomplete information:
 - adaptation to perturbed opponent policies
 - robustness to value-distribution shift
 - reasoning under reserve prices and tie rules
+
+The strongest signal comes from how well a model chooses a bid against the disclosed simulator for the current instance.
 
 ## Environment Arguments
 
@@ -49,6 +53,8 @@ The environment also computes:
 - `best_response_bid` and `best_response_expected_utility` from an empirical bid grid search
 - regret-style gaps against those baselines
 
+Because the environment exposes the auction assumptions directly in the prompt, these baselines are best interpreted as "how close was the submitted bid to the simulator's best response?" rather than as a hidden-theory benchmark.
+
 ## Logged Metrics
 
 Numeric rollout metrics exposed through the rubric:
@@ -75,6 +81,8 @@ Numeric rollout metrics exposed through the rubric:
 | `number_count` | How many numeric substrings were found during regex fallback. |
 | `n_bidders` | Total bidder count as a numeric metric. |
 
+Each dataset row stores `prompt` plus structured `info`. There is intentionally no `answer` string field, because scoring is programmatic and fully determined by the simulator-backed rubric rather than by string matching against a canonical answer.
+
 Categorical auction metadata is stored in each example's `info` field and duplicated in dataset columns where useful, including `instance_id`, `task_mode`, `distribution_type`, `difficulty`, opponent-policy details, reserve price, and the simulation seed.
 
 ## Local Usage
@@ -87,4 +95,10 @@ env = load_environment(
     num_mc_samples=64,
     compute_best_response_baseline=True,
 )
+```
+
+For a quick local sanity check without `datasets` or `verifiers`, run:
+
+```powershell
+python smoke_test.py
 ```

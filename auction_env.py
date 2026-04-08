@@ -5,6 +5,10 @@ when given its private value and a compact description of the auction setting.
 Scoring is exact with respect to the simulator used by the environment: the
 submitted bid is parsed, evaluated with deterministic Monte Carlo rollouts, and
 compared to a baseline reference and an empirical best response.
+
+Because prompts often reveal the opponent policy details, this benchmark mainly
+tests best-response reasoning against a known auction simulator rather than
+inference about hidden opponent behavior.
 """
 
 from __future__ import annotations
@@ -585,9 +589,9 @@ def parse_bid(raw_text: str, max_bid: float) -> ParseResult:
 def build_scenarios(info: JsonDict, num_mc_samples: int) -> list[Scenario]:
     rng = random.Random(int(info["simulation_seed"]))
     scenarios: list[Scenario] = []
-    for sample_index in range(num_mc_samples):
+    for _ in range(num_mc_samples):
         opponent_bids = []
-        for bidder_index in range(info["n_bidders"] - 1):
+        for _ in range(info["n_bidders"] - 1):
             opponent_value = sample_value(
                 rng,
                 info["distribution_type"],
@@ -681,13 +685,13 @@ def search_best_response(
     best_bid = 0.0
     best_utility = -math.inf
     for candidate in candidate_bids(max_bid, grid_size, extras):
-        utility, win_rate_estimate = estimate_bid_metrics(
+        utility = estimate_bid_metrics(
             bid=candidate,
             private_value=private_value,
             reserve_price=reserve_price,
             tie_break_rule=tie_break_rule,
             scenarios=scenarios,
-        )
+        )[0]
         if utility > best_utility + EPSILON or (
             abs(utility - best_utility) <= EPSILON and candidate < best_bid
         ):
@@ -712,13 +716,13 @@ def analyze_completion(
     reference_bid = info.get("reference_bid")
     reference_expected_utility = MISSING_FLOAT
     if reference_bid is not None:
-        reference_expected_utility, reference_win_rate = estimate_bid_metrics(
+        reference_expected_utility = estimate_bid_metrics(
             bid=float(reference_bid),
             private_value=float(info["private_value"]),
             reserve_price=float(info["reserve_price"]),
             tie_break_rule=str(info["tie_break_rule"]),
             scenarios=scenarios,
-        )
+        )[0]
 
     best_response_bid = MISSING_FLOAT
     best_response_expected_utility = MISSING_FLOAT
@@ -868,11 +872,6 @@ def build_instance_record(index: int, task_mode: str, config: AuctionEnvConfig) 
     return {
         "instance_id": instance_id,
         "prompt": build_prompt(info, require_json_output=config.require_json_output),
-        "answer": (
-            ""
-            if info["reference_bid"] is None
-            else json.dumps({"reference_bid": info["reference_bid"]})
-        ),
         "info": info,
         "task_mode": task_mode,
         "distribution_type": distribution_type,
