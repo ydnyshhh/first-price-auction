@@ -90,15 +90,15 @@ class ParseResult:
     number_count: int
 
 
-def _round_amount(value: float, digits: int = 2) -> float:
+def round_amount(value: float, digits: int = 2) -> float:
     return round(float(value), digits)
 
 
-def _clip(value: float, low: float, high: float) -> float:
+def clip_value(value: float, low: float, high: float) -> float:
     return min(max(value, low), high)
 
 
-def _mode_schedule(config: AuctionEnvConfig) -> list[str]:
+def build_mode_schedule(config: AuctionEnvConfig) -> list[str]:
     modes = list(config.task_modes)
     if not config.mode_weights:
         return [modes[i % len(modes)] for i in range(config.num_examples)]
@@ -127,7 +127,7 @@ def _mode_schedule(config: AuctionEnvConfig) -> list[str]:
     return schedule
 
 
-def _sample_distribution_spec(
+def sample_distribution_spec(
     task_mode: str,
     rng: random.Random,
     max_bid: float,
@@ -141,14 +141,14 @@ def _sample_distribution_spec(
     if task_mode == "reserve_price":
         if rng.random() < 0.6:
             return "uniform", {"low": 0.0, "high": max_bid}
-        mode = _round_amount(rng.uniform(0.25 * max_bid, 0.8 * max_bid))
+        mode = round_amount(rng.uniform(0.25 * max_bid, 0.8 * max_bid))
         return "triangular", {"low": 0.0, "high": max_bid, "mode": mode}
 
     draw = rng.random()
     if draw < 0.34:
         return "uniform", {"low": 0.0, "high": max_bid}
     if draw < 0.67:
-        mode = _round_amount(rng.uniform(0.15 * max_bid, 0.85 * max_bid))
+        mode = round_amount(rng.uniform(0.15 * max_bid, 0.85 * max_bid))
         return "triangular", {"low": 0.0, "high": max_bid, "mode": mode}
 
     scale = max_bid / 100.0
@@ -156,37 +156,37 @@ def _sample_distribution_spec(
         {
             "name": "mid_heavy",
             "points": [
-                {"value": _round_amount(5.0 * scale), "prob": 0.10},
-                {"value": _round_amount(25.0 * scale), "prob": 0.20},
-                {"value": _round_amount(50.0 * scale), "prob": 0.35},
-                {"value": _round_amount(75.0 * scale), "prob": 0.20},
-                {"value": _round_amount(100.0 * scale), "prob": 0.15},
+                {"value": round_amount(5.0 * scale), "prob": 0.10},
+                {"value": round_amount(25.0 * scale), "prob": 0.20},
+                {"value": round_amount(50.0 * scale), "prob": 0.35},
+                {"value": round_amount(75.0 * scale), "prob": 0.20},
+                {"value": round_amount(100.0 * scale), "prob": 0.15},
             ],
         },
         {
             "name": "coarse_four_point",
             "points": [
-                {"value": _round_amount(10.0 * scale), "prob": 0.25},
-                {"value": _round_amount(30.0 * scale), "prob": 0.25},
-                {"value": _round_amount(60.0 * scale), "prob": 0.25},
-                {"value": _round_amount(90.0 * scale), "prob": 0.25},
+                {"value": round_amount(10.0 * scale), "prob": 0.25},
+                {"value": round_amount(30.0 * scale), "prob": 0.25},
+                {"value": round_amount(60.0 * scale), "prob": 0.25},
+                {"value": round_amount(90.0 * scale), "prob": 0.25},
             ],
         },
         {
             "name": "top_heavy",
             "points": [
                 {"value": 0.0, "prob": 0.05},
-                {"value": _round_amount(20.0 * scale), "prob": 0.10},
-                {"value": _round_amount(45.0 * scale), "prob": 0.20},
-                {"value": _round_amount(70.0 * scale), "prob": 0.30},
-                {"value": _round_amount(100.0 * scale), "prob": 0.35},
+                {"value": round_amount(20.0 * scale), "prob": 0.10},
+                {"value": round_amount(45.0 * scale), "prob": 0.20},
+                {"value": round_amount(70.0 * scale), "prob": 0.30},
+                {"value": round_amount(100.0 * scale), "prob": 0.35},
             ],
         },
     ]
     return "discrete", supports[rng.randrange(len(supports))]
 
 
-def _sample_value(rng: random.Random, distribution_type: str, params: JsonDict) -> float:
+def sample_value(rng: random.Random, distribution_type: str, params: JsonDict) -> float:
     if distribution_type == "uniform":
         return rng.uniform(float(params["low"]), float(params["high"]))
     if distribution_type == "triangular":
@@ -208,7 +208,7 @@ def _sample_value(rng: random.Random, distribution_type: str, params: JsonDict) 
     raise ValueError(f"Unsupported distribution_type: {distribution_type}")
 
 
-def _describe_distribution(distribution_type: str, params: JsonDict) -> str:
+def describe_distribution(distribution_type: str, params: JsonDict) -> str:
     if distribution_type == "uniform":
         return f"Uniform[{params['low']}, {params['high']}]"
     if distribution_type == "triangular":
@@ -220,27 +220,27 @@ def _describe_distribution(distribution_type: str, params: JsonDict) -> str:
     return f"Discrete distribution '{params['name']}' with support {{{points}}}"
 
 
-def _sample_policy_spec(
+def sample_policy_spec(
     task_mode: str,
     rng: random.Random,
     n_bidders: int,
     max_bid: float,
 ) -> tuple[str, JsonDict]:
     if task_mode == "textbook":
-        return "equilibrium", {"alpha": _round_amount((n_bidders - 1) / n_bidders, 4)}
+        return "equilibrium", {"alpha": round_amount((n_bidders - 1) / n_bidders, 4)}
 
     if task_mode == "perturbed_opponents":
         draw = rng.random()
         if draw < 0.25:
             return "truthful", {}
         if draw < 0.55:
-            return "fractional", {"alpha": _round_amount(rng.uniform(0.55, 0.9), 3)}
+            return "fractional", {"alpha": round_amount(rng.uniform(0.55, 0.9), 3)}
         if draw < 0.8:
             return (
                 "noisy_fractional",
                 {
-                    "alpha": _round_amount(rng.uniform(0.55, 0.9), 3),
-                    "noise_width": _round_amount(0.08 * max_bid),
+                    "alpha": round_amount(rng.uniform(0.55, 0.9), 3),
+                    "noise_width": round_amount(0.08 * max_bid),
                 },
             )
         mixture = [
@@ -250,7 +250,7 @@ def _sample_policy_spec(
                 "type": "noisy_fractional",
                 "weight": 0.30,
                 "alpha": 0.67,
-                "noise_width": _round_amount(0.06 * max_bid),
+                "noise_width": round_amount(0.06 * max_bid),
             },
         ]
         return "mixed", {"mixture": mixture}
@@ -260,26 +260,26 @@ def _sample_policy_spec(
         if draw < 0.35:
             return "truthful", {}
         if draw < 0.75:
-            return "fractional", {"alpha": _round_amount(rng.uniform(0.6, 0.85), 3)}
+            return "fractional", {"alpha": round_amount(rng.uniform(0.6, 0.85), 3)}
         return (
             "noisy_fractional",
             {
-                "alpha": _round_amount(rng.uniform(0.6, 0.82), 3),
-                "noise_width": _round_amount(0.05 * max_bid),
+                "alpha": round_amount(rng.uniform(0.6, 0.82), 3),
+                "noise_width": round_amount(0.05 * max_bid),
             },
         )
 
     draw = rng.random()
     if draw < 0.4:
-        return "fractional", {"alpha": _round_amount(rng.uniform(0.55, 0.8), 3)}
+        return "fractional", {"alpha": round_amount(rng.uniform(0.55, 0.8), 3)}
     if draw < 0.7:
         return "truthful", {}
     if draw < 0.9:
         return (
             "noisy_fractional",
             {
-                "alpha": _round_amount(rng.uniform(0.58, 0.8), 3),
-                "noise_width": _round_amount(0.05 * max_bid),
+                "alpha": round_amount(rng.uniform(0.58, 0.8), 3),
+                "noise_width": round_amount(0.05 * max_bid),
             },
         )
     mixture = [
@@ -289,13 +289,13 @@ def _sample_policy_spec(
             "type": "noisy_fractional",
             "weight": 0.30,
             "alpha": 0.66,
-            "noise_width": _round_amount(0.05 * max_bid),
+            "noise_width": round_amount(0.05 * max_bid),
         },
     ]
     return "mixed", {"mixture": mixture}
 
 
-def _describe_policy(policy_type: str, params: JsonDict) -> str:
+def describe_policy(policy_type: str, params: JsonDict) -> str:
     if policy_type == "equilibrium":
         return (
             "standard equilibrium-inspired shading for uniform private values "
@@ -320,7 +320,7 @@ def _describe_policy(policy_type: str, params: JsonDict) -> str:
     return "mixed heuristic population: " + "; ".join(mixture_parts)
 
 
-def _opponent_bid(
+def compute_opponent_bid(
     value: float,
     policy_type: str,
     params: JsonDict,
@@ -330,15 +330,15 @@ def _opponent_bid(
 ) -> float:
     if policy_type == "equilibrium":
         alpha = float(params.get("alpha", (n_bidders - 1) / n_bidders))
-        return _clip(alpha * value, 0.0, max_bid)
+        return clip_value(alpha * value, 0.0, max_bid)
     if policy_type == "truthful":
-        return _clip(value, 0.0, max_bid)
+        return clip_value(value, 0.0, max_bid)
     if policy_type == "fractional":
-        return _clip(float(params["alpha"]) * value, 0.0, max_bid)
+        return clip_value(float(params["alpha"]) * value, 0.0, max_bid)
     if policy_type == "noisy_fractional":
         base = float(params["alpha"]) * value
         noise = rng.uniform(-float(params["noise_width"]), float(params["noise_width"]))
-        return _clip(base + noise, 0.0, max_bid)
+        return clip_value(base + noise, 0.0, max_bid)
     if policy_type == "mixed":
         threshold = rng.random()
         cumulative = 0.0
@@ -352,11 +352,11 @@ def _opponent_bid(
         component_params = {
             key: value for key, value in chosen.items() if key not in {"type", "weight"}
         }
-        return _opponent_bid(value, component_type, component_params, n_bidders, max_bid, rng)
+        return compute_opponent_bid(value, component_type, component_params, n_bidders, max_bid, rng)
     raise ValueError(f"Unsupported policy_type: {policy_type}")
 
 
-def _difficulty_label(
+def compute_difficulty_label(
     task_mode: str,
     distribution_type: str,
     n_bidders: int,
@@ -382,18 +382,18 @@ def _difficulty_label(
     return "hard"
 
 
-def _reference_bid(info: JsonDict) -> float | None:
+def compute_reference_bid(info: JsonDict) -> float | None:
     if (
         info["task_mode"] == "textbook"
         and info["distribution_type"] == "uniform"
         and info["reserve_price"] <= 0.0
         and info["opponent_policy_type"] == "equilibrium"
     ):
-        return _round_amount((info["n_bidders"] - 1) * info["private_value"] / info["n_bidders"], 4)
+        return round_amount((info["n_bidders"] - 1) * info["private_value"] / info["n_bidders"], 4)
     return None
 
 
-def _build_prompt(info: JsonDict, require_json_output: bool) -> str:
+def build_prompt(info: JsonDict, require_json_output: bool) -> str:
     reserve_line = (
         "There is no reserve price."
         if info["reserve_price"] <= 0.0
@@ -416,8 +416,8 @@ def _build_prompt(info: JsonDict, require_json_output: bool) -> str:
             "You are bidding in a sealed-bid first-price auction.",
             f"Your private value for the item is {info['private_value']:.2f}.",
             f"There are {info['n_bidders']} bidders total, including you.",
-            f"Private values are drawn independently from {_describe_distribution(info['distribution_type'], info['distribution_params'])}.",
-            f"Opponents are modeled as using {_describe_policy(info['opponent_policy_type'], info['opponent_policy_params'])}.",
+            f"Private values are drawn independently from {describe_distribution(info['distribution_type'], info['distribution_params'])}.",
+            f"Opponents are modeled as using {describe_policy(info['opponent_policy_type'], info['opponent_policy_params'])}.",
             reserve_line,
             tie_line,
             (
@@ -431,7 +431,7 @@ def _build_prompt(info: JsonDict, require_json_output: bool) -> str:
     )
 
 
-def _extract_completion_text(completion: Any) -> str:
+def extract_completion_text(completion: Any) -> str:
     if completion is None:
         return ""
     if isinstance(completion, str):
@@ -440,7 +440,7 @@ def _extract_completion_text(completion: Any) -> str:
         role = completion.get("role")
         if role not in {None, "assistant"}:
             return ""
-        return _extract_completion_text(completion.get("content", ""))
+        return extract_completion_text(completion.get("content", ""))
     if isinstance(completion, list):
         pieces: list[str] = []
         for item in completion:
@@ -461,7 +461,7 @@ def _extract_completion_text(completion: Any) -> str:
     return str(completion).strip()
 
 
-def _coerce_numeric(value: Any) -> float | None:
+def coerce_numeric(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
@@ -479,7 +479,7 @@ def _coerce_numeric(value: Any) -> float | None:
     return None
 
 
-def _parse_bid(raw_text: str, max_bid: float) -> ParseResult:
+def parse_bid(raw_text: str, max_bid: float) -> ParseResult:
     text = raw_text.strip()
     if not text:
         return ParseResult(
@@ -517,7 +517,7 @@ def _parse_bid(raw_text: str, max_bid: float) -> ParseResult:
                 parse_error="missing_bid",
                 number_count=0,
             )
-        bid = _coerce_numeric(payload["bid"])
+        bid = coerce_numeric(payload["bid"])
         if bid is None:
             return ParseResult(
                 bid=None,
@@ -560,7 +560,7 @@ def _parse_bid(raw_text: str, max_bid: float) -> ParseResult:
             number_count=len(numbers),
         )
 
-    bid = _coerce_numeric(numbers[0])
+    bid = coerce_numeric(numbers[0])
     if bid is None:
         return ParseResult(
             bid=None,
@@ -582,18 +582,18 @@ def _parse_bid(raw_text: str, max_bid: float) -> ParseResult:
     )
 
 
-def _build_scenarios(info: JsonDict, num_mc_samples: int) -> list[Scenario]:
+def build_scenarios(info: JsonDict, num_mc_samples: int) -> list[Scenario]:
     rng = random.Random(int(info["simulation_seed"]))
     scenarios: list[Scenario] = []
-    for _ in range(num_mc_samples):
+    for sample_index in range(num_mc_samples):
         opponent_bids = []
-        for _bidder in range(info["n_bidders"] - 1):
-            opponent_value = _sample_value(
+        for bidder_index in range(info["n_bidders"] - 1):
+            opponent_value = sample_value(
                 rng,
                 info["distribution_type"],
                 info["distribution_params"],
             )
-            opponent_bid = _opponent_bid(
+            opponent_bid = compute_opponent_bid(
                 value=opponent_value,
                 policy_type=info["opponent_policy_type"],
                 params=info["opponent_policy_params"],
@@ -606,7 +606,7 @@ def _build_scenarios(info: JsonDict, num_mc_samples: int) -> list[Scenario]:
     return scenarios
 
 
-def _utility_for_scenario(
+def utility_for_scenario(
     bid: float,
     private_value: float,
     reserve_price: float,
@@ -638,7 +638,7 @@ def _utility_for_scenario(
     return 0.0, 0.0
 
 
-def _estimate_bid_metrics(
+def estimate_bid_metrics(
     bid: float,
     private_value: float,
     reserve_price: float,
@@ -648,7 +648,7 @@ def _estimate_bid_metrics(
     total_utility = 0.0
     total_wins = 0.0
     for scenario in scenarios:
-        utility, win_flag = _utility_for_scenario(
+        utility, win_flag = utility_for_scenario(
             bid=bid,
             private_value=private_value,
             reserve_price=reserve_price,
@@ -661,7 +661,7 @@ def _estimate_bid_metrics(
     return total_utility / sample_count, total_wins / sample_count
 
 
-def _candidate_bids(max_bid: float, grid_size: int, extras: Iterable[float | None] = ()) -> list[float]:
+def candidate_bids(max_bid: float, grid_size: int, extras: Iterable[float | None] = ()) -> list[float]:
     candidates = {round(index * max_bid / (grid_size - 1), 8) for index in range(grid_size)}
     for candidate in extras:
         if candidate is not None and 0.0 <= candidate <= max_bid:
@@ -669,7 +669,7 @@ def _candidate_bids(max_bid: float, grid_size: int, extras: Iterable[float | Non
     return sorted(candidates)
 
 
-def _best_response(
+def search_best_response(
     private_value: float,
     reserve_price: float,
     tie_break_rule: str,
@@ -680,8 +680,8 @@ def _best_response(
 ) -> tuple[float, float]:
     best_bid = 0.0
     best_utility = -math.inf
-    for candidate in _candidate_bids(max_bid, grid_size, extras):
-        utility, _win_rate = _estimate_bid_metrics(
+    for candidate in candidate_bids(max_bid, grid_size, extras):
+        utility, win_rate_estimate = estimate_bid_metrics(
             bid=candidate,
             private_value=private_value,
             reserve_price=reserve_price,
@@ -696,23 +696,23 @@ def _best_response(
     return best_bid, best_utility
 
 
-def _sentinel(value: float | None) -> float:
+def sentinel_value(value: float | None) -> float:
     return MISSING_FLOAT if value is None else float(value)
 
 
-def _analyze_completion(
+def analyze_completion(
     completion: Any,
     info: JsonDict,
     config: AuctionEnvConfig,
 ) -> JsonDict:
-    raw_text = _extract_completion_text(completion)
-    parsed = _parse_bid(raw_text, max_bid=float(info["max_bid"]))
-    scenarios = _build_scenarios(info, config.num_mc_samples)
+    raw_text = extract_completion_text(completion)
+    parsed = parse_bid(raw_text, max_bid=float(info["max_bid"]))
+    scenarios = build_scenarios(info, config.num_mc_samples)
 
     reference_bid = info.get("reference_bid")
     reference_expected_utility = MISSING_FLOAT
     if reference_bid is not None:
-        reference_expected_utility, _ = _estimate_bid_metrics(
+        reference_expected_utility, reference_win_rate = estimate_bid_metrics(
             bid=float(reference_bid),
             private_value=float(info["private_value"]),
             reserve_price=float(info["reserve_price"]),
@@ -723,7 +723,7 @@ def _analyze_completion(
     best_response_bid = MISSING_FLOAT
     best_response_expected_utility = MISSING_FLOAT
     if config.compute_best_response_baseline:
-        best_response_bid, best_response_expected_utility = _best_response(
+        best_response_bid, best_response_expected_utility = search_best_response(
             private_value=float(info["private_value"]),
             reserve_price=float(info["reserve_price"]),
             tie_break_rule=str(info["tie_break_rule"]),
@@ -737,7 +737,7 @@ def _analyze_completion(
     win_rate = 0.0
     score = float(config.invalid_bid_penalty)
     if parsed.parse_success and parsed.bid is not None and parsed.bid_in_range:
-        expected_utility, win_rate = _estimate_bid_metrics(
+        expected_utility, win_rate = estimate_bid_metrics(
             bid=parsed.bid,
             private_value=float(info["private_value"]),
             reserve_price=float(info["reserve_price"]),
@@ -767,7 +767,7 @@ def _analyze_completion(
     analysis: JsonDict = {
         "score": score,
         "expected_utility": expected_utility,
-        "submitted_bid": _sentinel(parsed.bid),
+        "submitted_bid": sentinel_value(parsed.bid),
         "bid_to_value_ratio": (
             parsed.bid / float(info["private_value"])
             if parsed.bid is not None and float(info["private_value"]) > 0.0
@@ -778,7 +778,7 @@ def _analyze_completion(
         "parse_success": 1.0 if parsed.parse_success else 0.0,
         "json_valid": 1.0 if parsed.json_valid else 0.0,
         "bid_in_range": 1.0 if parsed.bid_in_range else 0.0,
-        "reference_bid": _sentinel(reference_bid),
+        "reference_bid": sentinel_value(reference_bid),
         "reference_expected_utility": reference_expected_utility,
         "utility_gap_to_reference": utility_gap_to_reference,
         "best_response_bid": best_response_bid,
@@ -800,7 +800,7 @@ def _analyze_completion(
     return analysis
 
 
-def _metric_value(
+def metric_value(
     state: dict[str, Any] | None,
     completion: Any,
     info: JsonDict | None,
@@ -809,33 +809,33 @@ def _metric_value(
 ) -> float:
     if state is None:
         return 0.0
-    cached = state.get("_auction_analysis")
+    cached = state.get("auction_analysis_cache")
     if cached is None:
-        cached = _analyze_completion(completion=completion, info=info or {}, config=config)
-        state["_auction_analysis"] = cached
+        cached = analyze_completion(completion=completion, info=info or {}, config=config)
+        state["auction_analysis_cache"] = cached
         state["auction_analysis"] = cached
     value = cached.get(key, 0.0)
     return float(value) if isinstance(value, (int, float)) else 0.0
 
 
-def _instance_record(index: int, task_mode: str, config: AuctionEnvConfig) -> JsonDict:
+def build_instance_record(index: int, task_mode: str, config: AuctionEnvConfig) -> JsonDict:
     rng = random.Random(config.seed + 1009 * index)
     n_bidders = int(rng.choice(config.n_bidders_options))
-    distribution_type, distribution_params = _sample_distribution_spec(
+    distribution_type, distribution_params = sample_distribution_spec(
         task_mode=task_mode,
         rng=rng,
         max_bid=config.max_bid,
     )
-    private_value = _round_amount(
-        _sample_value(rng, distribution_type=distribution_type, params=distribution_params),
+    private_value = round_amount(
+        sample_value(rng, distribution_type=distribution_type, params=distribution_params),
         digits=2,
     )
     reserve_price = 0.0
     if task_mode == "reserve_price":
         low, high = config.reserve_price_fraction_range
-        reserve_price = _round_amount(rng.uniform(low * config.max_bid, high * config.max_bid))
+        reserve_price = round_amount(rng.uniform(low * config.max_bid, high * config.max_bid))
 
-    opponent_policy_type, opponent_policy_params = _sample_policy_spec(
+    opponent_policy_type, opponent_policy_params = sample_policy_spec(
         task_mode=task_mode,
         rng=rng,
         n_bidders=n_bidders,
@@ -853,8 +853,8 @@ def _instance_record(index: int, task_mode: str, config: AuctionEnvConfig) -> Js
         "tie_break_rule": config.tie_break_rule,
         "opponent_policy_type": opponent_policy_type,
         "opponent_policy_params": opponent_policy_params,
-        "max_bid": _round_amount(config.max_bid, 2),
-        "difficulty": _difficulty_label(
+        "max_bid": round_amount(config.max_bid, 2),
+        "difficulty": compute_difficulty_label(
             task_mode=task_mode,
             distribution_type=distribution_type,
             n_bidders=n_bidders,
@@ -864,10 +864,10 @@ def _instance_record(index: int, task_mode: str, config: AuctionEnvConfig) -> Js
         ),
         "simulation_seed": config.seed * 1_000_003 + index * 7_919,
     }
-    info["reference_bid"] = _reference_bid(info)
+    info["reference_bid"] = compute_reference_bid(info)
     return {
         "instance_id": instance_id,
-        "prompt": _build_prompt(info, require_json_output=config.require_json_output),
+        "prompt": build_prompt(info, require_json_output=config.require_json_output),
         "answer": (
             ""
             if info["reference_bid"] is None
@@ -881,17 +881,17 @@ def _instance_record(index: int, task_mode: str, config: AuctionEnvConfig) -> Js
     }
 
 
-def _build_dataset(config: AuctionEnvConfig) -> "Dataset":
+def build_dataset(config: AuctionEnvConfig) -> "Dataset":
     from datasets import Dataset
 
     rows = [
-        _instance_record(index=index, task_mode=task_mode, config=config)
-        for index, task_mode in enumerate(_mode_schedule(config))
+        build_instance_record(index=index, task_mode=task_mode, config=config)
+        for index, task_mode in enumerate(build_mode_schedule(config))
     ]
     return Dataset.from_list(rows)
 
 
-def _build_rubric(config: AuctionEnvConfig) -> "vf.Rubric":
+def build_rubric(config: AuctionEnvConfig) -> "vf.Rubric":
     import verifiers as vf
 
     rubric = vf.Rubric()
@@ -900,9 +900,9 @@ def _build_rubric(config: AuctionEnvConfig) -> "vf.Rubric":
         completion: Any,
         info: JsonDict | None = None,
         state: dict[str, Any] | None = None,
-        **_: Any,
+        **unused_kwargs: Any,
     ) -> float:
-        return _metric_value(state=state, completion=completion, info=info, config=config, key="score")
+        return metric_value(state=state, completion=completion, info=info, config=config, key="score")
 
     rubric.add_reward_func(score, weight=1.0)
 
@@ -939,15 +939,15 @@ def _build_rubric(config: AuctionEnvConfig) -> "vf.Rubric":
             info: JsonDict | None = None,
             state: dict[str, Any] | None = None,
             *,
-            _metric_name: str = metric_name,
-            **_: Any,
+            metric_name_override: str = metric_name,
+            **unused_kwargs: Any,
         ) -> float:
-            return _metric_value(
+            return metric_value(
                 state=state,
                 completion=completion,
                 info=info,
                 config=config,
-                key=_metric_name,
+                key=metric_name_override,
             )
 
         metric.__name__ = metric_name
@@ -975,8 +975,8 @@ def load_environment(
     if overrides:
         env_config = replace(env_config, **overrides)
 
-    dataset = _build_dataset(env_config)
-    rubric = _build_rubric(env_config)
+    dataset = build_dataset(env_config)
+    rubric = build_rubric(env_config)
     return vf.SingleTurnEnv(dataset=dataset, rubric=rubric, **kwargs)
 
 

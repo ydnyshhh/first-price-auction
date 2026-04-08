@@ -1,4 +1,4 @@
-# first_price_auction
+﻿# first_price_auction
 
 `first_price_auction` is a compact Prime / `verifiers` environment for sealed-bid first-price auctions. Each example gives the model a private value and a fully specified auction setting, asks for one bid, and scores that bid with deterministic Monte Carlo expected utility. No LLM judge is used.
 
@@ -75,7 +75,7 @@ Numeric rollout metrics exposed through the rubric:
 | `number_count` | How many numeric substrings were found during regex fallback. |
 | `n_bidders` | Total bidder count as a numeric metric. |
 
-Categorical auction metadata is stored in each example’s `info` field and duplicated in dataset columns where useful, including `instance_id`, `task_mode`, `distribution_type`, `difficulty`, opponent-policy details, reserve price, and the simulation seed.
+Categorical auction metadata is stored in each example's `info` field and duplicated in dataset columns where useful, including `instance_id`, `task_mode`, `distribution_type`, `difficulty`, opponent-policy details, reserve price, and the simulation seed.
 
 ## Local Usage
 
@@ -88,5 +88,3 @@ env = load_environment(
     compute_best_response_baseline=True,
 )
 ```
-
-If you want the installable module name to match the environment name, `first_price_auction.py` re-exports `load_environment` from `auction_env.py`.
