@@ -7,6 +7,7 @@ name = "first-price-auction"
 version = "0.1.0"
 description = "Prime/verifiers single-turn environment for sealed-bid first-price auctions."
 readme = "README.md"
+tags = ["single-turn", "auctions", "economics", "strategic-reasoning", "eval"]
 requires-python = ">=3.10"
 dependencies = [
     "datasets",
@@ -16,6 +17,7 @@ dependencies = [
 [tool.hatch.build]
 include = [
     "auction_env.py",
+    "first_price_auction.py",
     "README.md",
     "pyproject.toml",
 ]
